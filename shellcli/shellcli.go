@@ -1,23 +1,28 @@
 package shellcli
 
 import (
-	"bufio"
 	"fmt"
+	"io"
 	"os"
-	"os/signal"
+	"path"
 	"strings"
 
 	"github.com/go-andiamo/splitter"
+	"github.com/peterh/liner"
 )
 
 // ShellCli is a simple shell-like interface with commands
 type ShellCli[T any] struct {
+	ProjectName     string
 	Commands        map[string]*Command[T]
 	Splitter        splitter.Splitter
 	ArgSplitter     splitter.Splitter
 	CaseInsensitive bool
 	Prompter        func(*ShellCli[T]) string
 	Data            *T
+
+	line        *liner.State
+	historyPath string
 }
 
 // Returns a help command
@@ -83,6 +88,8 @@ func (a *ShellCli[T]) Init() error {
 
 	a.ArgSplitter.AddDefaultOptions(splitter.IgnoreEmptyFirst, splitter.IgnoreEmptyLast, splitter.TrimSpaces, splitter.UnescapeQuotes)
 
+	a.historyPath = path.Join(os.TempDir(), "weed-shell")
+
 	return nil
 }
 
@@ -142,35 +149,32 @@ func (a *ShellCli[T]) Exec(cmd []string) error {
 	return nil
 }
 
-func (a *ShellCli[T]) Prompt() error {
-	fmt.Print(a.Prompter(a))
-
-	buf := bufio.NewReader(os.Stdin)
-	var command, err = buf.ReadString('\n')
-
-	if err != nil {
-		return err
-	}
-
+func (a *ShellCli[T]) RunString(command string) (bool, error) {
 	command = strings.TrimSpace(command)
 
 	tokens, err := a.Splitter.Split(command)
 
 	if err != nil {
-		return fmt.Errorf("error splitting command: %s", err)
+		return false, fmt.Errorf("error splitting command: %s", err)
 	}
 
 	if len(tokens) == 0 || tokens[0] == "" {
-		return nil
+		return false, nil
 	}
+
+	if tokens[0] == "exit" || tokens[0] == "quit" {
+		return true, nil
+	}
+
+	a.line.AppendHistory(command)
 
 	err = a.Exec(tokens)
 
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	return nil
+	return false, nil
 }
 
 // AddCommand adds a command to the shell client
@@ -196,23 +200,72 @@ func (a *ShellCli[T]) Run() {
 		os.Exit(1)
 	}
 
-	go func() {
-		for {
-			err = a.Prompt()
+	a.line = liner.NewLiner()
+	defer a.line.Close()
+	OnInterrupt(func() {
+		a.line.Close()
+	})
+
+	a.line.SetCtrlCAborts(true)
+	a.line.SetTabCompletionStyle(liner.TabPrints)
+
+	a.setCompletionHandler()
+	a.loadHistory()
+
+	defer a.saveHistory()
+
+	for {
+		cmd, err := a.line.Prompt(a.Prompter(a))
+		if err != nil {
+			if err != io.EOF {
+				fmt.Printf("%v\n", err)
+			}
+			return
+		}
+
+		for _, c := range strings.Split(cmd, ";") {
+			if c == "" {
+				continue
+			}
+
+			ok, err := a.RunString(c)
 
 			if err != nil {
 				fmt.Println("Error: ", err)
 			}
+
+			if ok {
+				return
+			}
 		}
-	}()
+	}
+}
 
-	// Wait for signals
-	signals := []os.Signal{os.Interrupt, os.Kill}
+func (a *ShellCli[T]) setCompletionHandler() {
+	a.line.SetCompleter(func(line string) (c []string) {
+		for name := range a.Commands {
+			if strings.HasPrefix(name, strings.ToLower(line)) {
+				c = append(c, name)
+			}
+		}
+		return
+	})
+}
 
-	var channel = make(chan os.Signal, 1)
-	signal.Notify(channel, signals...)
+func (a *ShellCli[T]) loadHistory() {
+	if f, err := os.Open(a.historyPath); err == nil {
+		a.line.ReadHistory(f)
+		f.Close()
+	}
+}
 
-	<-channel
-
-	fmt.Println("\nExiting...")
+func (a *ShellCli[T]) saveHistory() {
+	if f, err := os.Create(a.historyPath); err != nil {
+		fmt.Printf("Error creating history file: %v\n", err)
+	} else {
+		if _, err = a.line.WriteHistory(f); err != nil {
+			fmt.Printf("Error writing history file: %v\n", err)
+		}
+		f.Close()
+	}
 }
