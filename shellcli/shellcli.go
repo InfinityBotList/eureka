@@ -196,7 +196,7 @@ func (a *ShellCli[T]) Run() {
 	err := a.Init()
 
 	if err != nil {
-		fmt.Println("Error initializing animuscli: ", err)
+		fmt.Println("Error initializing cli: ", err)
 		os.Exit(1)
 	}
 
