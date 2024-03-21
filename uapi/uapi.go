@@ -59,6 +59,7 @@ type UAPIState struct {
 	AuthTypeMap         map[string]string // E.g. bot => Bot, user => User etc.
 	RouteDataMiddleware func(rd *RouteData, req *http.Request) (*RouteData, error)
 	BaseSanityCheck     func(r Route) error
+	PatchDocs           func(d *docs.Doc) *docs.Doc
 
 	// Used in cache algo
 	Context context.Context
@@ -240,6 +241,10 @@ func (r Route) Route(ro Router) {
 		}
 
 		docsObj.AuthType = append(docsObj.AuthType, t)
+	}
+
+	if State.PatchDocs != nil {
+		docsObj = State.PatchDocs(docsObj)
 	}
 
 	// Count the number of { and } in the pattern
