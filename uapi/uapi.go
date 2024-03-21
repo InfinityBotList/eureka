@@ -58,6 +58,7 @@ type UAPIState struct {
 	Authorize           func(r Route, req *http.Request) (AuthData, HttpResponse, bool)
 	AuthTypeMap         map[string]string // E.g. bot => Bot, user => User etc.
 	RouteDataMiddleware func(rd *RouteData, req *http.Request) (*RouteData, error)
+	BaseSanityCheck     func(r Route) error
 
 	// Used in cache algo
 	Context context.Context
@@ -155,6 +156,7 @@ type Route struct {
 	Auth         []AuthType
 	ExtData      map[string]any
 	AuthOptional bool
+	SanityCheck  func() error
 
 	// Disables sanity check that ensures all variables are followed by a /
 	//
@@ -204,6 +206,22 @@ func (r Route) Route(ro Router) {
 
 	if r.Setup != nil {
 		r.Setup()
+	}
+
+	if State.BaseSanityCheck != nil {
+		err := State.BaseSanityCheck(r)
+
+		if err != nil {
+			panic("Base sanity check failed: " + err.Error())
+		}
+	}
+
+	if r.SanityCheck != nil {
+		err := r.SanityCheck()
+
+		if err != nil {
+			panic("Sanity check failed: " + err.Error())
+		}
 	}
 
 	docsObj := r.Docs()
