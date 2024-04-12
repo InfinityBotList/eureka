@@ -20,6 +20,7 @@ type SetupData struct {
 
 var (
 	DocsSetupData *SetupData
+	stringType    = openapi3.Types([]string{"string"})
 )
 
 func Setup() {
@@ -172,30 +173,31 @@ func SchemaInject(s any) openapi3gen.Option {
 
 		switch ft.Name() {
 		case "Text":
-			schema.Type = "string"
+			schema.Type = &stringType
 			schema.Nullable = true
 		case "Int4":
 			panic("never use pgtype/whatever.Int4, use int32 instead")
 		case "Int8":
 			panic("never use pgtype/whatever.Int8, use int/int64 instead")
 		case "Timestamp":
-			schema.Type = "string"
+			schema.Type = &stringType
 			schema.Format = "date-time"
 		case "Timestamptz":
-			schema.Type = "string"
+			schema.Type = &stringType
 			schema.Format = "date-time"
 		case "Date":
-			schema.Type = "string"
+			schema.Type = &stringType
 			schema.Format = "date"
 		case "Bool":
 			panic("never use pgtype/whatever.Bool, use bool instead")
 		case "UUID":
-			schema.Type = "string"
+			schema.Type = &stringType
 			schema.Format = "uuid"
 		}
 
 		if tag.Get("type") != "" {
-			schema.Type = tag.Get("type")
+			typ := openapi3.Types([]string{tag.Get("type")})
+			schema.Type = &typ
 		}
 
 		return nil
