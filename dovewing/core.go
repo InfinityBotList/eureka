@@ -243,6 +243,9 @@ const (
 type ClearUserInfo struct {
 	// The user that was cleared
 	ClearedFrom []ClearFrom
+
+	// Whether the user was a bot or not
+	IsBot bool
 }
 
 type ClearUserReq struct {
@@ -278,6 +281,13 @@ func ClearUser(ctx context.Context, id string, platform Platform, req ClearUserR
 	var tableName = TableName(platform)
 
 	var clearedFrom []ClearFrom
+	var isBot bool
+
+	err := state.Pool.QueryRow(ctx, "SELECT bot FROM "+tableName+" WHERE id = $1", id).Scan(&isBot)
+
+	if err != nil {
+		return nil, err
+	}
 
 	// Check iuc
 	if len(req.ClearFrom) == 0 || slices.Contains(req.ClearFrom, ClearFromInternalUserCache) {
@@ -315,5 +325,6 @@ func ClearUser(ctx context.Context, id string, platform Platform, req ClearUserR
 
 	return &ClearUserInfo{
 		ClearedFrom: clearedFrom,
+		IsBot:       isBot,
 	}, nil
 }
