@@ -148,6 +148,15 @@ func GetUser(ctx context.Context, id string, platform Platform) (*dovetypes.Plat
 		user.ExtraData = map[string]any{
 			"cache": "redis",
 		}
+
+		for i, middleware := range state.Middlewares {
+			user, err = middleware(platform, user)
+
+			if err != nil {
+				return nil, fmt.Errorf("middleware %d failed: %s", i, err)
+			}
+		}
+
 		return user, nil
 	}
 
