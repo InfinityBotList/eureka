@@ -2,11 +2,11 @@ package redis
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/infinitybotlist/eureka/hotcache"
+	"github.com/infinitybotlist/eureka/jsonimpl"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -28,7 +28,7 @@ func (r RedisHotCache[T]) Get(ctx context.Context, key string) (*T, error) {
 
 	var val T
 
-	err = json.Unmarshal(bytes, &val)
+	err = jsonimpl.Unmarshal(bytes, &val)
 
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func (r RedisHotCache[T]) Delete(ctx context.Context, key string) error {
 }
 
 func (r RedisHotCache[T]) Set(ctx context.Context, key string, value *T, expiry time.Duration) error {
-	bytes, err := json.Marshal(value)
+	bytes, err := jsonimpl.Marshal(value)
 
 	if err != nil {
 		return err

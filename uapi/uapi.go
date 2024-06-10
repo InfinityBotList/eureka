@@ -9,13 +9,12 @@ import (
 	"strings"
 
 	docs "github.com/infinitybotlist/eureka/doclib"
+	"github.com/infinitybotlist/eureka/jsonimpl"
 	"go.uber.org/zap"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 	"golang.org/x/exp/slices"
-
-	jsoniter "github.com/json-iterator/go"
 )
 
 type UAPIConstants struct {
@@ -89,8 +88,6 @@ func SetupState(s UAPIState) {
 }
 
 var (
-	Json = jsoniter.ConfigFastest
-
 	// Stores the UAPI state for UAPI plugins
 	State *UAPIState
 )
@@ -347,7 +344,7 @@ func respond(ctx context.Context, w http.ResponseWriter, data chan HttpResponse)
 		}
 
 		if msg.Json != nil {
-			bytes, err := Json.Marshal(msg.Json)
+			bytes, err := jsonimpl.Marshal(msg.Json)
 
 			if err != nil {
 				State.Logger.Error("[uapi.respond] Failed to unmarshal JSON response", zap.Error(err), zap.Int("size", len(msg.Data)))
@@ -560,7 +557,7 @@ func marshalReq(r *http.Request, dst interface{}) (resp HttpResponse, ok bool) {
 		}, false
 	}
 
-	err = Json.Unmarshal(bodyBytes, &dst)
+	err = jsonimpl.Unmarshal(bodyBytes, &dst)
 
 	if err != nil {
 		State.Logger.Error("[uapi/marshalReq] Failed to unmarshal JSON", zap.Error(err), zap.Int("size", len(bodyBytes)))
