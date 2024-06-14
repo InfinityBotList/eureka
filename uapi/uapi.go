@@ -147,6 +147,7 @@ type AuthData struct {
 type Route struct {
 	Method       Method
 	Pattern      string
+	Aliases      map[string]string // Aliases for the route, this is useful for e.g. URL rewrites, format is pattern: reason
 	OpId         string
 	Handler      func(d RouteData, r *http.Request) HttpResponse
 	Setup        func()
@@ -285,32 +286,49 @@ func (r Route) Route(ro Router) {
 		}
 	}
 
+	if len(r.Aliases) > 0 {
+		docsObj.Description += "\n\nAliases for this endpoint:"
+		for pattern, reason := range r.Aliases {
+			docsObj.Description += "\n\n" + pattern + " (" + reason + ")"
+		}
+	}
+
 	// Add the path params to the docs
 	docs.Route(docsObj)
 
+	createRouteHandler(r, ro, r.Pattern)
+
+	if len(r.Aliases) > 0 {
+		for pattern := range r.Aliases {
+			createRouteHandler(r, ro, pattern)
+		}
+	}
+}
+
+func createRouteHandler(r Route, ro Router, pat string) {
 	switch r.Method {
 	case GET:
-		ro.Get(r.Pattern, func(w http.ResponseWriter, req *http.Request) {
+		ro.Get(pat, func(w http.ResponseWriter, req *http.Request) {
 			handle(r, w, req)
 		})
 	case POST:
-		ro.Post(r.Pattern, func(w http.ResponseWriter, req *http.Request) {
+		ro.Post(pat, func(w http.ResponseWriter, req *http.Request) {
 			handle(r, w, req)
 		})
 	case PATCH:
-		ro.Patch(r.Pattern, func(w http.ResponseWriter, req *http.Request) {
+		ro.Patch(pat, func(w http.ResponseWriter, req *http.Request) {
 			handle(r, w, req)
 		})
 	case PUT:
-		ro.Put(r.Pattern, func(w http.ResponseWriter, req *http.Request) {
+		ro.Put(pat, func(w http.ResponseWriter, req *http.Request) {
 			handle(r, w, req)
 		})
 	case DELETE:
-		ro.Delete(r.Pattern, func(w http.ResponseWriter, req *http.Request) {
+		ro.Delete(pat, func(w http.ResponseWriter, req *http.Request) {
 			handle(r, w, req)
 		})
 	case HEAD:
-		ro.Head(r.Pattern, func(w http.ResponseWriter, req *http.Request) {
+		ro.Head(pat, func(w http.ResponseWriter, req *http.Request) {
 			handle(r, w, req)
 		})
 	default:
