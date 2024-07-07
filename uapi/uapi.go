@@ -571,7 +571,7 @@ func marshalReq(r *http.Request, dst interface{}) (resp HttpResponse, ok bool) {
 	if len(bodyBytes) == 0 {
 		return HttpResponse{
 			Status: http.StatusBadRequest,
-			Json:   State.Constants.BodyRequired,
+			Data:   State.Constants.BodyRequired,
 		}, false
 	}
 
