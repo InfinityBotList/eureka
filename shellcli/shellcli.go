@@ -205,7 +205,7 @@ func (a *ShellCli[T]) ExecuteCommands(cmd string) (cancel bool, err error) {
 		}
 	}
 
-	return false
+	return false, nil
 }
 
 // Run constantly prompts for input and os.Exit()'s on interrupt signal
