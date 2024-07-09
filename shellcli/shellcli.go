@@ -192,7 +192,7 @@ func (a *ShellCli[T]) AddCommand(name string, cmd *Command[T]) {
 }
 
 // ExecuteCommands handles a list of commands in the form 'cmd; cmd etc.'
-func (a *ShellCli[T]) ExecuteCommands(cmd string) (cancel bool) {
+func (a *ShellCli[T]) ExecuteCommands(cmd string) (cancel bool, err error) {
 	for _, c := range strings.Split(cmd, ";") {
 		if c == "" {
 			continue
@@ -200,12 +200,8 @@ func (a *ShellCli[T]) ExecuteCommands(cmd string) (cancel bool) {
 
 		cancel, err := a.RunString(c)
 
-		if err != nil {
-			fmt.Println("Error: ", err)
-		}
-
-		if cancel {
-			return true // Exit out
+		if err != nil || cancel {
+			return cancel, err
 		}
 	}
 
@@ -246,7 +242,11 @@ func (a *ShellCli[T]) Run() {
 			return
 		}
 
-		cancel := a.ExecuteCommands(cmd)
+		cancel, err := a.ExecuteCommands(cmd)
+
+		if err != nil {
+			fmt.Println("Error: ", err)
+		}
 
 		if cancel {
 			return
