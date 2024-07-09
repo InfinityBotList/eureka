@@ -165,8 +165,10 @@ func (a *ShellCli[T]) RunString(command string) (bool, error) {
 	if tokens[0] == "exit" || tokens[0] == "quit" {
 		return true, nil
 	}
-
-	a.line.AppendHistory(command)
+	
+	if a.line != nil {
+		a.line.AppendHistory(command)
+	}
 
 	err = a.Exec(tokens)
 
