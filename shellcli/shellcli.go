@@ -165,7 +165,7 @@ func (a *ShellCli[T]) RunString(command string) (bool, error) {
 	if tokens[0] == "exit" || tokens[0] == "quit" {
 		return true, nil
 	}
-	
+
 	if a.line != nil {
 		a.line.AppendHistory(command)
 	}
@@ -193,23 +193,23 @@ func (a *ShellCli[T]) AddCommand(name string, cmd *Command[T]) {
 
 // ExecuteCommands handles a list of commands in the form 'cmd; cmd etc.'
 func (a *ShellCli[T]) ExecuteCommands(cmd string) (cancel bool) {
-             	for _, c := range strings.Split(cmd, ";") {
-                        if c == "" {
-                                continue
-                        }
+	for _, c := range strings.Split(cmd, ";") {
+		if c == "" {
+			continue
+		}
 
-                        cancel, err := a.RunString(c)
+		cancel, err := a.RunString(c)
 
-                        if err != nil {
-                                fmt.Println("Error: ", err)
-                        }
+		if err != nil {
+			fmt.Println("Error: ", err)
+		}
 
-                        if cancel {
-                                return true // Exit out
-                        }
-                }
+		if cancel {
+			return true // Exit out
+		}
+	}
 
-		return false
+	return false
 }
 
 // Run constantly prompts for input and os.Exit()'s on interrupt signal
