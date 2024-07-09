@@ -191,6 +191,27 @@ func (a *ShellCli[T]) AddCommand(name string, cmd *Command[T]) {
 	a.Commands[name] = cmd
 }
 
+// ExecuteCommands handles a list of commands in the form 'cmd; cmd etc.'
+func (a *ShellCli[T]) ExecuteCommands(cmd string) (cancel bool) {
+             	for _, c := range strings.Split(cmd, ";") {
+                        if c == "" {
+                                continue
+                        }
+
+                        cancel, err := a.RunString(c)
+
+                        if err != nil {
+                                fmt.Println("Error: ", err)
+                        }
+
+                        if cancel {
+                                return true // Exit out
+                        }
+                }
+
+		return false
+}
+
 // Run constantly prompts for input and os.Exit()'s on interrupt signal
 //
 // Only use this for actual shell apps
@@ -225,20 +246,10 @@ func (a *ShellCli[T]) Run() {
 			return
 		}
 
-		for _, c := range strings.Split(cmd, ";") {
-			if c == "" {
-				continue
-			}
+		cancel := a.ExecuteCommands(cmd)
 
-			ok, err := a.RunString(c)
-
-			if err != nil {
-				fmt.Println("Error: ", err)
-			}
-
-			if ok {
-				return
-			}
+		if cancel {
+			return
 		}
 	}
 }
