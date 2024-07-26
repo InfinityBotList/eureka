@@ -371,14 +371,8 @@ func respond(ctx context.Context, w http.ResponseWriter, data chan HttpResponse)
 				return
 			}
 
-			// JSON needs this explicitly to avoid calling WriteHeader twice
-			if msg.Status == 0 {
-				w.WriteHeader(http.StatusOK)
-			} else {
-				w.WriteHeader(msg.Status)
-			}
-
-			w.Write(bytes)
+			msg.Json = nil
+			msg.Bytes = bytes
 		}
 
 		if msg.Status == 0 {
