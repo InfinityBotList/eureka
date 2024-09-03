@@ -1,63 +1,12 @@
 package genconfig
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
 	"strings"
 )
-
-func retArrInt[T comparable](t []T) []string {
-	var arr []string
-	for _, v := range t {
-		arr = append(arr, fmt.Sprint(v))
-	}
-	return arr
-}
-
-// Casts a array of type any to []string
-func arrayCast(v any) []string {
-	switch t := v.(type) {
-	// String type
-	case []string:
-		return t
-	// Any type
-	case []any:
-		var arr []string
-		for _, v := range t {
-			arr = append(arr, v.(string))
-		}
-		return arr
-	// All the int types
-	case []int:
-		return retArrInt(t)
-	case []int8:
-		return retArrInt(t)
-	case []int16:
-		return retArrInt(t)
-	case []int32:
-		return retArrInt(t)
-	case []int64:
-		return retArrInt(t)
-	// All the uint types
-	case []uint:
-		return retArrInt(t)
-	case []uint8:
-		return retArrInt(t)
-	case []uint16:
-		return retArrInt(t)
-	case []uint32:
-		return retArrInt(t)
-	case []uint64:
-		return retArrInt(t)
-	// All the float types
-	case []float32:
-		return retArrInt(t)
-	case []float64:
-		return retArrInt(t)
-	}
-	panic(fmt.Sprintf("arrayCast: invalid type %T", v))
-}
 
 type simpleYamlParser struct {
 	indent        int
@@ -160,7 +109,20 @@ func (c *simpleYamlParser) vToYaml(v reflect.StructField) string {
 		comment := v.Tag.Get("comment")
 		var split []string = []string{}
 
-		splitValueCasted := arrayCast(reflect.ValueOf(sliceValue).Interface())
+		// Turn the slice value to an []string
+		var splitValueCasted []string
+
+		valueBytes, err := json.Marshal(sliceValue)
+
+		if err != nil {
+			panic(err)
+		}
+
+		err = json.Unmarshal(valueBytes, &splitValueCasted)
+
+		if err != nil {
+			panic(err)
+		}
 
 		if len(splitValueCasted) == 0 || c.defaultOnly {
 			// Get the default tag
