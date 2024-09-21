@@ -1,9 +1,7 @@
 # eureka
 
-Set of common primitives for all services.
+Set of common primitives useful for Go web services.
 
-- cmd: A simple command parser with subcommand support for the apps that don't need cobra
-- shellcli: A simple shell system with support for custom commands. Useful for making debug terminals for internal tasks
 - zapchi: Modified version of the chi logger with support for Uber's zap
 - crypto: Common cryptography primitives
 - proxy: Custom proxy for `discord` to a given proxy
