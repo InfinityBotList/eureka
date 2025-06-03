@@ -1,3 +1,5 @@
+// Package genconfig provides functionality to auto-generate a sample YAML
+// configuration file (`config.yaml.sample`) from a Go struct using struct tags.
 package genconfig
 
 import (
@@ -8,220 +10,169 @@ import (
 	"strings"
 )
 
+// SampleFileName defines the default name for the generated sample config file.
+var SampleFileName = "config.yaml.sample"
+
+// simpleYamlParser generates YAML from a struct based on `yaml`, `default`, `comment`, and `required` struct tags.
 type simpleYamlParser struct {
-	indent        int
-	originalValue any
-	currVal       any
-	defaultOnly   bool
+	indent        int         // Current indentation level (used for formatting)
+	originalValue any         // Root struct value
+	currVal       any         // Current value being processed (useful for nested structs/maps)
+	defaultOnly   bool        // Whether to use only the default values instead of actual field values
 }
 
+// GenConfig generates a sample config file from the given struct.
+// The struct fields must be tagged with `yaml`, and optionally `default`, `comment`, and `required`.
+func GenConfig(cfg any) {
+	parser := simpleYamlParser{defaultOnly: true}
+
+	// Remove existing sample config file if it exists
+	if _, err := os.Stat(SampleFileName); err == nil {
+		if err := os.Remove(SampleFileName); err != nil {
+			panic(err)
+		}
+	}
+
+	// Create a new sample config file
+	file, err := os.Create(SampleFileName)
+	if err != nil {
+		panic(err)
+	}
+	defer file.Close()
+
+	// Write parsed YAML content to the file
+	if _, err := file.WriteString(parser.Parse(cfg)); err != nil {
+		panic(err)
+	}
+}
+
+// Parse generates a YAML-formatted string from the given struct.
 func (p *simpleYamlParser) Parse(v any) string {
 	p.originalValue = v
-
 	var sb strings.Builder
 
-	for _, v := range reflect.VisibleFields(reflect.TypeOf(v)) {
-		sb.WriteString(p.vToYaml(v))
+	t := reflect.TypeOf(v)
+	for _, field := range reflect.VisibleFields(t) {
+		sb.WriteString(p.processField(field))
 	}
 
 	return strings.TrimSpace(sb.String())
 }
 
-func (c *simpleYamlParser) _getValue(field string) reflect.Value {
-	// Gets the value of a field in the original value or currValue using reflect
-	defer func() {
-		recover()
-	}()
+// processField processes a struct field and returns its YAML representation.
+func (p *simpleYamlParser) processField(field reflect.StructField) string {
+	kind := field.Type.Kind()
+	tagName := field.Tag.Get("yaml")
 
-	if c.currVal != nil {
-		return reflect.ValueOf(c.currVal).FieldByName(field)
-	}
-	return reflect.ValueOf(c.originalValue).FieldByName(field)
-}
-
-func (c *simpleYamlParser) vToYaml(v reflect.StructField) string {
-	str := ""
-
-	if v.Type == nil {
-		panic("nil type")
+	// Reject pointer types
+	if kind == reflect.Ptr {
+		panic(fmt.Sprintf("pointer type %s not supported", field.Name))
 	}
 
-	if v.Type.Kind() == reflect.Ptr {
-		panic("pointer type not supported")
-	}
+	// Base indentation
+	indent := strings.Repeat("  ", p.indent)
+	result := ""
 
-	switch v.Type.Kind() {
+	switch kind {
 	case reflect.Struct:
-		structName := v.Tag.Get("yaml")
-		str += strings.Repeat(" ", c.indent*2) + structName + ":\n"
-		c.indent++
-		// For every field in the struct, call vToYaml
-		for i := 0; i < v.Type.NumField(); i++ {
-			currVal := c.currVal
-			c.currVal = c._getValue(v.Name).Interface()
-			str += c.vToYaml(v.Type.Field(i))
-			c.currVal = currVal
+		result += fmt.Sprintf("%s%s:\n", indent, tagName)
+		p.indent++
+		curr := p.currVal
+		p.currVal = p.getFieldValue(field.Name).Interface()
+		for i := 0; i < field.Type.NumField(); i++ {
+			result += p.processField(field.Type.Field(i))
 		}
-		c.indent--
+		p.currVal = curr
+		p.indent--
+		result += "\n"
 
-		if c.indent == 0 {
-			str += "\n" // Add a newline after each struct/map
-		}
 	case reflect.Map:
-		// Maps are similar to structs, first part is the same
-		mapName := v.Tag.Get("yaml")
-		str += strings.Repeat(" ", c.indent*2) + mapName + ":\n"
+		result += fmt.Sprintf("%s%s:\n", indent, tagName)
+		mapVal := p.getFieldValue(field.Name)
+		mapKeys := mapVal.MapKeys()
 
-		// Get the map value
-		mapValue := c._getValue(v.Name).Interface()
-
-		// Get the map keys
-		mapKeys := reflect.ValueOf(mapValue).MapKeys()
-
-		// For every key, get the value and add it to the string
 		for _, key := range mapKeys {
-			c.indent++
-			str += strings.Repeat(" ", c.indent*2) + key.String() + ":\n"
-			c.indent++
-
-			// Get the struct value
-			structValue := reflect.ValueOf(reflect.ValueOf(mapValue).MapIndex(key).Interface())
-
-			currVal := c.currVal
-			c.currVal = structValue.Interface()
-
-			for j := 0; j < structValue.NumField(); j++ {
-				str += c.vToYaml(structValue.Type().Field(j))
+			val := mapVal.MapIndex(key).Interface()
+			result += fmt.Sprintf("%s  %s:\n", indent, key.String())
+			p.indent += 2
+			curr := p.currVal
+			p.currVal = val
+			structType := reflect.TypeOf(val)
+			for i := 0; i < structType.NumField(); i++ {
+				result += p.processField(structType.Field(i))
 			}
-
-			c.currVal = currVal
-			c.indent--
-			c.indent--
+			p.currVal = curr
+			p.indent -= 2
 		}
+		result += "\n"
 
-		if c.indent == 0 {
-			str += "\n" // Add a newline after each struct/map
-		}
 	case reflect.Slice:
-		// Get value of the slice
-		sliceValue := c._getValue(v.Name).Interface()
-		vName := v.Tag.Get("yaml")
-		comment := v.Tag.Get("comment")
-		var split []string = []string{}
+		comment := field.Tag.Get("comment")
+		defaultTag := field.Tag.Get("default")
+		fieldValue := p.getFieldValue(field.Name).Interface()
+		var items []string
 
-		// Turn the slice value to an []string
-		var splitValueCasted []string
+		// Convert value to []string
+		var strValues []string
+		data, _ := json.Marshal(fieldValue)
+		_ = json.Unmarshal(data, &strValues)
 
-		valueBytes, err := json.Marshal(sliceValue)
-
-		if err != nil {
-			panic(err)
-		}
-
-		err = json.Unmarshal(valueBytes, &splitValueCasted)
-
-		if err != nil {
-			panic(err)
-		}
-
-		if len(splitValueCasted) == 0 || c.defaultOnly {
-			// Get the default tag
-			defTag := v.Tag.Get("default")
-
-			// Split the default tag by commas
-			split = strings.Split(defTag, ",")
+		if len(strValues) == 0 || p.defaultOnly {
+			items = strings.Split(defaultTag, ",")
 		} else {
-			for _, v := range splitValueCasted {
-				if comment == "" {
-					split = append(split, fmt.Sprintf("%v", v))
+			for _, val := range strValues {
+				if comment != "" {
+					items = append(items, fmt.Sprintf("%s # %s", val, comment))
 				} else {
-					split = append(split, fmt.Sprintf("%v # %v", v, comment))
+					items = append(items, val)
 				}
 			}
 		}
 
-		str += strings.Repeat(" ", c.indent*2) + vName + ":\n"
-
-		c.indent++
-		for _, s := range split {
-			str += strings.Repeat(" ", c.indent*2) + "- " + strings.TrimSpace(s) + "\n"
+		result += fmt.Sprintf("%s%s:\n", indent, tagName)
+		p.indent++
+		for _, item := range items {
+			result += fmt.Sprintf("%s- %s\n", strings.Repeat("  ", p.indent), strings.TrimSpace(item))
 		}
-		c.indent--
-	case reflect.String, reflect.Int, reflect.Bool, reflect.Uint64, reflect.Uint32, reflect.Uint16, reflect.Uint8, reflect.Uint, reflect.Int64, reflect.Int32, reflect.Int16, reflect.Int8:
-		// Get the default tag
-		defTag := v.Tag.Get("default")
+		p.indent--
 
-		valInt := fmt.Sprintf("%v", c._getValue(v.Name))
-
-		if !c.defaultOnly && !strings.Contains(valInt, "<invalid reflect.Value>") {
-			defTag = valInt
+	default: // Primitives
+		value := fmt.Sprintf("%v", p.getFieldValue(field.Name))
+		if p.defaultOnly || strings.Contains(value, "<invalid reflect.Value>") {
+			value = field.Tag.Get("default")
 		}
-
-		// Get the comment tag
-		commentTag := v.Tag.Get("comment")
-
-		// Get the required tag
-		requiredTag := v.Tag.Get("required")
-
-		if requiredTag != "true" && requiredTag != "false" {
-			requiredTag = "true"
+		comment := field.Tag.Get("comment")
+		required := field.Tag.Get("required")
+		if required == "" {
+			required = "true"
 		}
 
-		yamlName := v.Tag.Get("yaml")
+		result += fmt.Sprintf("%s%s: %s", indent, tagName, value)
 
-		if defTag != "" {
-			str += strings.Repeat(" ", c.indent*2) + yamlName + ": " + defTag
-		} else {
-			str += strings.Repeat(" ", c.indent*2) + yamlName + ":"
+		if comment != "" {
+			result += " # " + comment
 		}
-
-		if commentTag != "" {
-			str += " # " + commentTag
-		}
-
-		if requiredTag == "false" {
-			if commentTag != "" {
-				str += " (optional)"
+		if required == "false" {
+			if comment != "" {
+				result += " (optional)"
 			} else {
-				str += " # (optional)"
+				result += " # (optional)"
 			}
 		}
-
-		str += "\n"
+		result += "\n"
 	}
 
-	return str
+	return result
 }
 
-var SampleFileName string = "config.yaml.sample"
-
-func GenConfig(cfg any) {
-	syp := simpleYamlParser{
-		defaultOnly: true,
+// getFieldValue returns the reflect.Value for a given field name from the current struct being processed.
+// Uses reflection safely with recover.
+func (p *simpleYamlParser) getFieldValue(field string) reflect.Value {
+	defer func() {
+		_ = recover() // Ignore panics if a field doesn't exist
+	}()
+	if p.currVal != nil {
+		return reflect.ValueOf(p.currVal).FieldByName(field)
 	}
-
-	// Create config.yaml.sample, delete if it already exists
-	_, err := os.Stat(SampleFileName)
-
-	if err == nil {
-		err = os.Remove(SampleFileName)
-
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	f, err := os.Create(SampleFileName)
-
-	if err != nil {
-		panic(err)
-	}
-
-	defer f.Close()
-
-	_, err = f.WriteString(syp.Parse(cfg))
-
-	if err != nil {
-		panic(err)
-	}
+	return reflect.ValueOf(p.originalValue).FieldByName(field)
 }
